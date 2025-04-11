@@ -1,7 +1,7 @@
-backend/node_modules
-backend/.env
-backend/routes/otp-test.html 
-backend/routes/test-cors.html
+node_modules
+.env
+routes/otp-test.html 
+routes/test-cors.html
 ~$Week1_plan.xlsx
 document.txt
 GoogleAuthCredencials.png
