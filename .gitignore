@@ -16,12 +16,5 @@ build/
 
 
 
-node_modules
-.env
-routes/otp-test.html 
-routes/test-cors.html
-~$Week1_plan.xlsx
-document.txt
-GoogleAuthCredencials.png
-pathaddinfrontend.png
-Week1_plan.xlsx
+
+
