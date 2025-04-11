@@ -1,3 +1,21 @@
+# Node.js
+node_modules/
+.env
+
+# Logs
+logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Build folders
+dist/
+build/
+
+
+
 node_modules
 .env
 routes/otp-test.html 
