@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true },
   gender:{type:String},
   dob:{type:String},
+  googleId: {type:String},
+  facebookId: {type:String},
   
   roles: {
     type: [String],

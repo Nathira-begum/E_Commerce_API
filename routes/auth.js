@@ -4,78 +4,167 @@ const User = require("../models/user");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
+const { body, validationResult } = require("express-validator");
+
+// Utility: Find user by email or name (case-insensitive)
+const findUserByIdentifier = async (identifier) => {
+  return await User.findOne({
+    $or: [
+      { email: new RegExp("^" + identifier + "$", "i") },
+      { name: new RegExp("^" + identifier + "$", "i") },
+    ],
+  });
+};
 
 // ✅ Login
 router.post("/login", async (req, res) => {
-  const identifier = req.body.email || req.body.name;
-  const password = req.body.password;
+  const { email, name, password } = req.body;
+  const identifier = email || name;
 
   try {
-    const user = await User.findOne({
-      $or: [
-        { email: new RegExp("^" + identifier + "$", "i") },
-        { name: new RegExp("^" + identifier + "$", "i") },
-      ],
-    });
-
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await findUserByIdentifier(identifier);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid password" });
+    if (!isMatch)
+      return res.status(401).json({ success: false, message: "Invalid password" });
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
     return res.status(200).json({
+      success: true,
       message: "Login successful",
+      token,
       user: {
         id: user._id,
-        name: user.name,
+        name: `${user.firstName} ${user.lastName}`.trim(),
         email: user.email,
         roles: user.roles,
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+    console.error("Login error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 // ✅ Signup
-router.post("/signup", async (req, res) => {
-  const { email, name, phone, password, confirmPassword } = req.body;
-  console.log("Received data:", req.body);
-
-  if (!email || !name || !phone || !password || !confirmPassword)
-    return res.status(400).json({ message: "All fields are required" });
-
-  if (password !== confirmPassword)
-    return res.status(400).json({ message: "Passwords do not match" });
-
-  try {
-    const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ message: "Email already exists" });
-
-    const existingUserPhone = await User.findOne({ phone });
-    if (existingUserPhone) {
-      return res.status(400).json({ message: "Phone number already exists" });
+router.post(
+  "/signup",
+  [
+    body("firstName").notEmpty().withMessage("First name is required"),
+    body("lastName").notEmpty().withMessage("Last name is required"),
+    body("email").isEmail().withMessage("Invalid email format"),
+    body("phone")
+      .notEmpty().withMessage("Phone number is required")
+      .isMobilePhone().withMessage("Invalid phone number"),
+    body("password")
+      .isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
+    body("confirmPassword").custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error("Passwords do not match");
+      }
+      return true;
+    }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const { email, firstName, lastName, phone, password } = req.body;
 
-    const [firstName, ...lastNameParts] = name.trim().split(" ");
-    const lastName = lastNameParts.join(" ");
+    try {
+      // Check for existing email
+      if (await User.findOne({ email })) {
+        return res.status(400).json({ success: false, message: "Email already exists" });
+      }
 
-    const newUser = new User({
-      email,
-      firstName,
-      lastName,
-      phone,
-      password: hashedPassword,
-    });
+      // Check for existing phone number
+      if (await User.findOne({ phone })) {
+        return res.status(400).json({ success: false, message: "Phone number already exists" });
+      }
 
-    const savedUser = await newUser.save();
-    res.status(201).json({ message: "Signup successful", user: savedUser });
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create new user
+      const newUser = new User({
+        email,
+        firstName,
+        lastName,
+        phone,
+        password: hashedPassword,
+        emailVerified: false, // Set emailVerified to false initially
+      });
+
+      // Save user to DB
+      const savedUser = await newUser.save();
+
+      // Generate JWT for email verification
+      const emailVerificationToken = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+      const emailVerificationLink = `${process.env.CLIENT_URL}/verify-email/${emailVerificationToken}`;
+
+      // Send email verification link
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        to: savedUser.email,
+        subject: "Email Verification",
+        html: `
+          <p>Hello ${savedUser.firstName},</p>
+          <p>Please click <a href="${emailVerificationLink}">here</a> to verify your email address.</p>
+          <p>This link will expire in 1 hour.</p>
+        `,
+      });
+
+      // Generate JWT for login purposes
+      const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+      // Send response
+      return res.status(201).json({
+        success: true,
+        message: "Signup successful. Please check your email for verification.",
+        token,
+        user: {
+          id: savedUser._id,
+          firstName: savedUser.firstName,
+          lastName: savedUser.lastName,
+          email: savedUser.email,
+        },
+      });
+    } catch (error) {
+      console.error("Signup error:", error);
+      return res.status(500).json({ success: false, message: "Server error" });
+    }
+  }
+);
+
+// ✅ Verify Email
+router.get("/verify-email/:token", async (req, res) => {
+  const { token } = req.params;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    user.emailVerified = true;
+    await user.save();
+
+    return res.status(200).json({ success: true, message: "Email successfully verified!" });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Verify email error:", error);
+    return res.status(400).json({ success: false, message: "Invalid or expired token" });
   }
 });
 
@@ -84,18 +173,12 @@ router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
 
   try {
-    console.log("Step 1: Email received:", email);
     const user = await User.findOne({ email });
-    if (!user) {
-      console.log("Step 2: No user found");
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
 
-    console.log("Step 3: User found:", user.email);
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "15m",
-    });
-    console.log("Step 4: Token generated");
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+    const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -104,22 +187,24 @@ router.post("/forgot-password", async (req, res) => {
         pass: process.env.EMAIL_PASS,
       },
     });
-    console.log("Step 5: Transporter configured");
 
-    const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
-    console.log("Step 6: Reset link:", resetLink);
-
-    console.log("Step 7: Attempting to send email...");
     await transporter.sendMail({
       to: user.email,
-      subject: "Password Reset",
-      html: `<p>Click <a href="${resetLink}">here</a> to reset your password.</p>`,
+      subject: "Password Reset Request",
+      html: `
+        <p>Hello ${user.firstName},</p>
+        <p>Click <a href="${resetLink}">here</a> to reset your password.</p>
+        <p>This link will expire in 15 minutes.</p>
+      `,
     });
-    console.log("✅ Email sent successfully");
 
-    res.status(200).json({ message: "Password reset link sent" });
+    return res.status(200).json({
+      success: true,
+      message: "Password reset link sent to your email",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Forgot password error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -128,61 +213,76 @@ router.post("/reset-password/:token", async (req, res) => {
   const { password } = req.body;
   const { token } = req.params;
 
+  if (!password || password.length < 6) {
+    return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+  }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.findByIdAndUpdate(decoded.id, { password: hashedPassword });
-    res.status(200).json({ message: "Password reset successful" });
+    await User.findByIdAndUpdate(decoded.id, { password: hashedPassword }, { runValidators: false });
+
+    return res.status(200).json({ success: true, message: "Password reset successful" });
   } catch (error) {
-    res.status(400).json({ message: "Invalid or expired token" });
+    console.error("Reset password error:", error);
+    return res.status(400).json({ success: false, message: "Invalid or expired token" });
   }
 });
 
-// Express.js route
+// ✅ Get User by ID
 router.get("/api/get-user/:id", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json({ user });
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    return res.status(200).json({ success: true, user });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Fetch user error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-// Update profile
+// ✅ Update Profile
 router.post("/update-profile", async (req, res) => {
-  console.log("Received request to update profile");
   const { userId, firstName, lastName, email, phone, gender, dob } = req.body;
-  console.log(req.body, "reqbody<<<<<<<<<<<<");
 
   if (!userId) {
-    return res.status(400).json({ message: "User ID missing" });
+    return res.status(400).json({ success: false, message: "User ID is required" });
   }
+
   try {
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
 
-    const updateData = {
-      firstName,
-      lastName,
-      email,
-      phone,
-      gender,
-      dob: dob ? new Date(dob) : undefined,
+    const updatedFields = {
+      firstName: firstName?.trim() || user.firstName,
+      lastName: lastName?.trim() || user.lastName,
+      email: email?.trim() || user.email,
+      phone: phone?.trim() || user.phone,
+      gender: gender || user.gender,
+      dob: dob ? new Date(dob) : user.dob,
     };
 
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
-      new: true,
-    });
+    const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, { new: true });
 
-    console.log("profile updated<<<<<<<<<<<");
-    res.json({ message: "Profile updated successfully", user: updatedUser });
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        gender: updatedUser.gender,
+        dob: updatedUser.dob,
+      },
+    });
   } catch (error) {
-    console.error("Update failed:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Update profile error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
