@@ -12,6 +12,8 @@ const connectDB = require("./config/db");
 const User = require("./models/user");
 const authRoutes = require("./routes/auth");
 require("./passport-setup");
+const vendorRoutes = require('./routes/vendorRoutes');
+const productRoutes = require('./routes/productRoutes');
 
 const app = express();
 
@@ -38,6 +40,8 @@ app.use(passport.session());
 
 // ------------------ 📦 Auth API Routes ------------------
 app.use("/api", authRoutes);
+app.use('/api/vendor', vendorRoutes);
+app.use('/api/products', productRoutes);
 
 // ------------------ 🔐 Google OAuth ------------------
 app.get("/api/auth/google", (req, res, next) => {
