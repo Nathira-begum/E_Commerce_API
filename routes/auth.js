@@ -53,8 +53,7 @@ router.post("/login", async (req, res) => {
 router.post(
   "/signup",
   [
-    body("firstName").notEmpty().withMessage("First name is required"),
-    body("lastName").notEmpty().withMessage("Last name is required"),
+    body("name").notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Invalid email format"),
     body("phone")
       .notEmpty().withMessage("Phone number is required")
@@ -74,7 +73,7 @@ router.post(
       return res.status(400).json({ success: false, message: errors.array()[0].msg });
     }
 
-    const { email, firstName, lastName, phone, password } = req.body;
+    const { email, name, phone, password } = req.body;
 
     try {
       // Check for existing email
@@ -93,8 +92,7 @@ router.post(
       // Create new user
       const newUser = new User({
         email,
-        firstName,
-        lastName,
+        name,
         phone,
         password: hashedPassword,
         emailVerified: false, // Set emailVerified to false initially
@@ -120,7 +118,7 @@ router.post(
         to: savedUser.email,
         subject: "Email Verification",
         html: `
-          <p>Hello ${savedUser.firstName},</p>
+          <p>Hello ${savedUser.name},</p>
           <p>Please click <a href="${emailVerificationLink}">here</a> to verify your email address.</p>
           <p>This link will expire in 1 hour.</p>
         `,
@@ -192,7 +190,7 @@ router.post("/forgot-password", async (req, res) => {
       to: user.email,
       subject: "Password Reset Request",
       html: `
-        <p>Hello ${user.firstName},</p>
+        <p>Hello ${user.name},</p>
         <p>Click <a href="${resetLink}">here</a> to reset your password.</p>
         <p>This link will expire in 15 minutes.</p>
       `,
@@ -246,7 +244,7 @@ router.get("/api/get-user/:id", async (req, res) => {
 
 // ✅ Update Profile
 router.post("/update-profile", async (req, res) => {
-  const { userId, firstName, lastName, email, phone, gender, dob } = req.body;
+  const { userId, name, email, phone, gender, dob } = req.body;
 
   if (!userId) {
     return res.status(400).json({ success: false, message: "User ID is required" });
@@ -258,8 +256,7 @@ router.post("/update-profile", async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
 
     const updatedFields = {
-      firstName: firstName?.trim() || user.firstName,
-      lastName: lastName?.trim() || user.lastName,
+      name: name?.trim() || user.name,
       email: email?.trim() || user.email,
       phone: phone?.trim() || user.phone,
       gender: gender || user.gender,
@@ -273,7 +270,7 @@ router.post("/update-profile", async (req, res) => {
       message: "Profile updated successfully",
       user: {
         id: updatedUser._id,
-        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+        name: `${updatedUser.name}`.trim(),
         email: updatedUser.email,
         phone: updatedUser.phone,
         gender: updatedUser.gender,
