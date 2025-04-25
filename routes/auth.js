@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const { body, validationResult } = require("express-validator");
+const mongoose = require("mongoose");
+
 
 // Utility: Find user by email or name (case-insensitive)
 const findUserByIdentifier = async (identifier) => {
@@ -18,11 +20,9 @@ const findUserByIdentifier = async (identifier) => {
 
 // ✅ Login
 router.post("/login", async (req, res) => {
-  const { email, name, password } = req.body;
-  const identifier = email || name;
-
+  const { email, password } = req.body;
   try {
-    const user = await findUserByIdentifier(identifier);
+    const user = await User.findOne({ email });
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
@@ -37,10 +37,14 @@ router.post("/login", async (req, res) => {
       message: "Login successful",
       token,
       user: {
-        id: user._id,
-        name: `${user.firstName} ${user.lastName}`.trim(),
-        email: user.email,
-        roles: user.roles,
+        _id:       user._id,
+        firstName: user.firstName,
+        lastName:  user.lastName,
+        email:     user.email,
+        phone:     user.phone   || "",
+        dob:       user.dob     || null,
+        gender:    user.gender  || "",
+        roles:     user.roles   || [],
       },
     });
   } catch (error) {
@@ -49,11 +53,16 @@ router.post("/login", async (req, res) => {
   }
 });
 
+
+
+
+
 // ✅ Signup
 router.post(
   "/signup",
   [
-    body("name").notEmpty().withMessage("Name is required"),
+    body("firstName").notEmpty().withMessage("First name is required"),
+    body("lastName").notEmpty().withMessage("Last name is required"),
     body("email").isEmail().withMessage("Invalid email format"),
     body("phone")
       .notEmpty().withMessage("Phone number is required")
@@ -73,70 +82,44 @@ router.post(
       return res.status(400).json({ success: false, message: errors.array()[0].msg });
     }
 
-    const { email, name, phone, password } = req.body;
+    const { firstName, lastName, email, phone, password, dob, gender } = req.body;
 
     try {
-      // Check for existing email
-      if (await User.findOne({ email })) {
+      if (await User.findOne({ email }))
         return res.status(400).json({ success: false, message: "Email already exists" });
-      }
 
-      // Check for existing phone number
-      if (await User.findOne({ phone })) {
+      if (await User.findOne({ phone }))
         return res.status(400).json({ success: false, message: "Phone number already exists" });
-      }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create new user
       const newUser = new User({
+        firstName,
+        lastName,
         email,
-        name,
         phone,
+        dob,
+        gender,
         password: hashedPassword,
-        emailVerified: false, // Set emailVerified to false initially
+        emailVerified: false,
       });
 
-      // Save user to DB
       const savedUser = await newUser.save();
 
-      // Generate JWT for email verification
-      const emailVerificationToken = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-      const emailVerificationLink = `${process.env.CLIENT_URL}/verify-email/${emailVerificationToken}`;
-
-      // Send email verification link
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        to: savedUser.email,
-        subject: "Email Verification",
-        html: `
-          <p>Hello ${savedUser.name},</p>
-          <p>Please click <a href="${emailVerificationLink}">here</a> to verify your email address.</p>
-          <p>This link will expire in 1 hour.</p>
-        `,
-      });
-
-      // Generate JWT for login purposes
       const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-      // Send response
       return res.status(201).json({
         success: true,
-        message: "Signup successful. Please check your email for verification.",
+        message: "Signup successful",
         token,
         user: {
-          id: savedUser._id,
+          _id: savedUser._id,
           firstName: savedUser.firstName,
           lastName: savedUser.lastName,
           email: savedUser.email,
+          phone: savedUser.phone,
+          dob: savedUser.dob,
+          gender: savedUser.gender,
         },
       });
     } catch (error) {
@@ -244,33 +227,40 @@ router.get("/api/get-user/:id", async (req, res) => {
 
 // ✅ Update Profile
 router.post("/update-profile", async (req, res) => {
-  const { userId, name, email, phone, gender, dob } = req.body;
+  const { userId, firstName, lastName, email, phone, gender, dob } = req.body;
 
   if (!userId) {
-    return res.status(400).json({ success: false, message: "User ID is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "User ID is required" });
   }
 
   try {
     const user = await User.findById(userId);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const updatedFields = {
-      name: name?.trim() || user.name,
+      firstName: firstName?.trim() || user.firstName,
+      lastName: lastName?.trim() || user.lastName,
       email: email?.trim() || user.email,
       phone: phone?.trim() || user.phone,
       gender: gender || user.gender,
       dob: dob ? new Date(dob) : user.dob,
     };
 
-    const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, { new: true });
+    const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, {
+      new: true,
+    });
 
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
       user: {
         id: updatedUser._id,
-        name: `${updatedUser.name}`.trim(),
+        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
         email: updatedUser.email,
         phone: updatedUser.phone,
         gender: updatedUser.gender,
@@ -282,5 +272,9 @@ router.post("/update-profile", async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+
+
+
 
 module.exports = router;
