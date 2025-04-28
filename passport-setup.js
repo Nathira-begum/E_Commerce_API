@@ -1,3 +1,4 @@
+// passport-setup.js
 require("dotenv").config();
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
@@ -5,32 +6,18 @@ const FacebookStrategy = require("passport-facebook").Strategy;
 const bcrypt = require("bcryptjs");
 const User = require("./models/user");
 
-// Destructure environment variables
 const {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
-  GOOGLE_CALLBACK_URL,
   FACEBOOK_CLIENT_ID,
   FACEBOOK_CLIENT_SECRET,
-  FACEBOOK_CALLBACK_URL
+  SERVER_URL,
 } = process.env;
 
-// Debugging check to ensure env vars are loaded
-console.log("OAuth ENV Check:", {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_CALLBACK_URL,
-  FACEBOOK_CLIENT_ID,
-  FACEBOOK_CLIENT_SECRET,
-  FACEBOOK_CALLBACK_URL
-});
-
-// Serialize the user ID into the session
 passport.serializeUser((user, done) => {
-  done(null, user._id);
+  done(null, user.id);
 });
 
-// Deserialize the user from session using the ID
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await User.findById(id).select("-password");
@@ -40,72 +27,68 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// ✅ Google OAuth Strategy
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: GOOGLE_CLIENT_ID,
-      clientSecret: GOOGLE_CLIENT_SECRET,
-      callbackURL: GOOGLE_CALLBACK_URL,
-      prompt: "select_account"
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        let user = await User.findOne({ googleId: profile.id });
+// ✅ Correct Google Strategy
+passport.use(new GoogleStrategy({
+  clientID: GOOGLE_CLIENT_ID,
+  clientSecret: GOOGLE_CLIENT_SECRET,
+  callbackURL: `${SERVER_URL}/api/auth/google/callback`,
+},
+async (accessToken, refreshToken, profile, done) => {
+  try {
+    // Step 1: Try finding user by googleId
+    let user = await User.findOne({ googleId: profile.id });
 
-        if (!user) {
-          const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
+    // Step 2: If not found, check if user with same email exists
+    if (!user) {
+      user = await User.findOne({ email: profile.emails?.[0]?.value });
 
-          user = await new User({
-            googleId: profile.id,
-            email: profile.emails?.[0]?.value || "google_user@nomail.com",
-            firstName: profile.name?.givenName || "Google",
-            lastName: profile.name?.familyName || "User",
-            phone: "0000000000",
-            password: randomPassword,
-          }).save();
-        }
-
-        done(null, user);
-      } catch (err) {
-        console.error("Google OAuth error:", err);
-        done(err, null);
+      if (user) {
+        // Email already exists -> Link googleId to existing user
+        user.googleId = profile.id;
+        await user.save();
+      } else {
+        // No user with email -> create new user
+        user = await User.create({
+          googleId: profile.id,
+          email: profile.emails?.[0]?.value || `noemail@google.com`,
+          firstName: profile.name?.givenName || "Google",
+          lastName: profile.name?.familyName || "User",
+          phone: "0000000000",
+          password: await bcrypt.hash(Math.random().toString(36).slice(-8), 10),
+        });
       }
     }
-  )
-);
 
-// ✅ Facebook OAuth Strategy
-passport.use(
-  new FacebookStrategy(
-    {
-      clientID: FACEBOOK_CLIENT_ID,
-      clientSecret: FACEBOOK_CLIENT_SECRET,
-      callbackURL: FACEBOOK_CALLBACK_URL,
-      profileFields: ["id", "emails", "name"],
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        let user = await User.findOne({ facebookId: profile.id });
+    done(null, user);
+  } catch (err) {
+    done(err, null);
+  }
+}));
 
-        if (!user) {
-          const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
 
-          user = await new User({
-            facebookId: profile.id,
-            email: profile.emails?.[0]?.value || "facebook_user@nomail.com",
-            firstName: profile.name?.givenName || "Facebook",
-            lastName: profile.name?.familyName || "User",
-            phone: "0000000000",
-            password: randomPassword,
-          }).save();
-        }
+// ✅ Correct Facebook Strategy
+passport.use(new FacebookStrategy({
+  clientID: FACEBOOK_CLIENT_ID,
+  clientSecret: FACEBOOK_CLIENT_SECRET,
+  callbackURL: `${SERVER_URL}/api/auth/facebook/callback`,
+  profileFields: ["id", "emails", "name"],
+}, 
+async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await User.findOne({ facebookId: profile.id });
 
-        done(null, user);
-      } catch (err) {
-        console.error("Facebook OAuth error:", err);
-        done(err, null);
-      }
+    if (!user) {
+      user = await User.create({
+        facebookId: profile.id,
+        email: profile.emails?.[0]?.value || `noemail@facebook.com`,
+        firstName: profile.name?.givenName || "Facebook",
+        lastName: profile.name?.familyName || "User",
+        phone: "0000000000",
+        password: await bcrypt.hash(Math.random().toString(36).slice(-8), 10),
+      });
     }
-  )
-);
+    done(null, user);
+  } catch (err) {
+    done(err, null);
+  }
+}));

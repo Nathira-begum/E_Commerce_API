@@ -5,7 +5,6 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const { body, validationResult } = require("express-validator");
-const mongoose = require("mongoose");
 
 
 // Utility: Find user by email or name (case-insensitive)
@@ -18,33 +17,40 @@ const findUserByIdentifier = async (identifier) => {
   });
 };
 
+
 // ✅ Login
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
-      return res.status(401).json({ success: false, message: "Invalid password" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid password" });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
 
     return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
       user: {
-        _id:       user._id,
+        _id: user._id,
         firstName: user.firstName,
-        lastName:  user.lastName,
-        email:     user.email,
-        phone:     user.phone   || "",
-        dob:       user.dob     || null,
-        gender:    user.gender  || "",
-        roles:     user.roles   || [],
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone || "",
+        dob: user.dob || null,
+        gender: user.gender || "",
+        roles: user.roles || [],
       },
     });
   } catch (error) {
@@ -52,10 +58,6 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
-
-
-
 
 // ✅ Signup
 router.post(
@@ -65,10 +67,13 @@ router.post(
     body("lastName").notEmpty().withMessage("Last name is required"),
     body("email").isEmail().withMessage("Invalid email format"),
     body("phone")
-      .notEmpty().withMessage("Phone number is required")
-      .isMobilePhone().withMessage("Invalid phone number"),
+      .notEmpty()
+      .withMessage("Phone number is required")
+      .isMobilePhone()
+      .withMessage("Invalid phone number"),
     body("password")
-      .isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
     body("confirmPassword").custom((value, { req }) => {
       if (value !== req.body.password) {
         throw new Error("Passwords do not match");
@@ -79,17 +84,24 @@ router.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+      return res
+        .status(400)
+        .json({ success: false, message: errors.array()[0].msg });
     }
 
-    const { firstName, lastName, email, phone, password, dob, gender } = req.body;
+    const { firstName, lastName, email, phone, password, dob, gender } =
+      req.body;
 
     try {
       if (await User.findOne({ email }))
-        return res.status(400).json({ success: false, message: "Email already exists" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Email already exists" });
 
       if (await User.findOne({ phone }))
-        return res.status(400).json({ success: false, message: "Phone number already exists" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Phone number already exists" });
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -106,7 +118,9 @@ router.post(
 
       const savedUser = await newUser.save();
 
-      const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+      const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
 
       return res.status(201).json({
         success: true,
@@ -137,15 +151,21 @@ router.get("/verify-email/:token", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     user.emailVerified = true;
     await user.save();
 
-    return res.status(200).json({ success: true, message: "Email successfully verified!" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Email successfully verified!" });
   } catch (error) {
     console.error("Verify email error:", error);
-    return res.status(400).json({ success: false, message: "Invalid or expired token" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid or expired token" });
   }
 });
 
@@ -156,9 +176,13 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "15m",
+    });
     const resetLink = `${process.env.CLIENT_URL}/reset-password/${token}`;
 
     const transporter = nodemailer.createTransport({
@@ -195,19 +219,30 @@ router.post("/reset-password/:token", async (req, res) => {
   const { token } = req.params;
 
   if (!password || password.length < 6) {
-    return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 6 characters",
+    });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.findByIdAndUpdate(decoded.id, { password: hashedPassword }, { runValidators: false });
+    await User.findByIdAndUpdate(
+      decoded.id,
+      { password: hashedPassword },
+      { runValidators: false }
+    );
 
-    return res.status(200).json({ success: true, message: "Password reset successful" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Password reset successful" });
   } catch (error) {
     console.error("Reset password error:", error);
-    return res.status(400).json({ success: false, message: "Invalid or expired token" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid or expired token" });
   }
 });
 
@@ -216,7 +251,9 @@ router.get("/api/get-user/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select("-password");
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     return res.status(200).json({ success: true, user });
   } catch (error) {
@@ -272,9 +309,5 @@ router.post("/update-profile", async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
-
-
-
 
 module.exports = router;
