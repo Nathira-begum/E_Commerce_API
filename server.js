@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+<<<<<<< HEAD
 const cors = require("cors");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
@@ -17,14 +18,32 @@ const vendorRoutes = require('./routes/vendorRoutes');
 const productRoutes = require('./routes/productRoutes');
 const path = require('path');
 const fs = require("fs");
+=======
+const mongoose = require("mongoose");
+const passport = require("passport");
+const session = require("express-session");
+const cors = require("cors");
+>>>>>>> 782f5c13d248c80ff388a5382ac8badefc912ee2
 const app = express();
 
-// ------------------ 🔗 Connect to MongoDB ------------------
-connectDB();
+// Passport setup
+require("./passport-setup");
 
-// ------------------ 🔧 Middleware Setup ------------------
-app.use(cookieParser());
+// 👇 Add your user auth routes
+const userRoutes = require("./routes/auth"); // make sure this path is correct
+
+// Environment Variables
+const { SERVER_URL, CLIENT_URL, MONGO_URI } = process.env;
+
+// Connect MongoDB
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Middlewares
+app.use(cors({ origin: CLIENT_URL || "http://localhost:5173", credentials: true }));
 app.use(express.json());
+<<<<<<< HEAD
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(express.urlencoded({ extended: true }));
@@ -32,48 +51,58 @@ app.use(cors({
   origin: "http://localhost:5173",
   credentials: true,
 }));
+=======
+>>>>>>> 782f5c13d248c80ff388a5382ac8badefc912ee2
 
-// ------------------ 🔐 Session & Passport ------------------
+// Sessions for passport
 app.use(session({
-  secret: process.env.SESSION_SECRET || "default_secret",
+  secret: 'your_secret',
   resave: false,
   saveUninitialized: false,
+  cookie: {
+    secure: false, // true if using HTTPS
+    sameSite: 'lax'
+  }
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
-// ------------------ 📦 Auth API Routes ------------------
-app.use("/api", authRoutes);
-app.use('/api/vendor', vendorRoutes);
-app.use('/api/products', productRoutes);
+// 🔐 Auth Routes (Google + Facebook)
+app.get('/api/auth/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
 
-// ------------------ 🔐 Google OAuth ------------------
-app.get("/api/auth/google", (req, res, next) => {
-  passport.authenticate("google", {
-    scope: ["profile", "email"],
-    prompt: "select_account",
-  })(req, res, next);
+app.get('/api/auth/google/callback', 
+  passport.authenticate('google', { 
+    successRedirect: '/api/auth/google/success', 
+    failureRedirect: '/login/failed' 
+  })
+);
+
+app.get('/api/auth/google/success', (req, res) => {
+  if (req.user) {
+    const frontendUrl = CLIENT_URL || "http://localhost:5173";
+    res.redirect(`${frontendUrl}?user=${encodeURIComponent(JSON.stringify(req.user))}`);
+  } else {
+    res.redirect("/login/failed");
+  }
 });
 
-app.get("/api/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: "http://localhost:5173/login",
-    successRedirect: "http://localhost:5173/myaccount",
-  })
+app.get('/api/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+
+app.get('/api/auth/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  (req, res) => {
+    const { firstName, lastName, email, phone } = req.user;
+    res.redirect(`${CLIENT_URL}/oauth-success?firstName=${firstName}&lastName=${lastName}&email=${email}&phone=${phone}`);
+  }
 );
 
-// ------------------ 🔐 Facebook OAuth ------------------
-app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+// ✅ Your REST API Routes (signup, login, profile, etc.)
+app.use("/api", userRoutes);
 
-app.get("/api/auth/facebook/callback",
-  passport.authenticate("facebook", {
-    failureRedirect: "http://localhost:5173/login",
-    successRedirect: "http://localhost:5173/myaccount",
-  })
-);
-
-// ------------------ 🔑 Forgot Password ------------------
-
+<<<<<<< HEAD
 // Adding rate limiting for forgot password route
 const forgotPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -206,7 +235,10 @@ app.get("/", (req, res) => {
 });
 
 // ------------------ 🚀 Start Server ------------------
+=======
+// Start Server
+>>>>>>> 782f5c13d248c80ff388a5382ac8badefc912ee2
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running at ${SERVER_URL || `http://localhost:${PORT}`}`);
 });
