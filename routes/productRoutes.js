@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require("path");
+const fs = require("fs");
 const Product = require('../models/Product');
-const { v4: uuidv4 } = require('uuid');
+const { v4:uuidv4 } = require('uuid');
 
 // DELETE product by ID
 router.delete('/:id', async (req, res) => {
@@ -33,30 +36,45 @@ router.get('/', async (req, res) => {
     }
   });
   
-
-// Add new product
-router.post('/add', async (req, res) => {
+  //upload dir
+  const uploadDir = path.join(__dirname, "../uploads");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+  }
+  
+  // Add new product
+router.post("/add-product", async (req, res) => {
   try {
-    const { productId, name, image, price, description, colors, sizes, discount, stock, vendorEmail } = req.body;
-
-    const newProduct = new Product({
-      productId: productId || uuidv4(),
+    const {
       name,
-      image,
       price,
-      description,
-      colors,
-      sizes,
       discount,
       stock,
-      vendorEmail
+      sizes,
+      colors,
+      tags,
+      image,
+      description,
+    } = req.body;
+
+    // Create new product with proper array handling
+    const product = new Product({
+      name,
+      price,
+      discount,
+      stock,
+      sizes,       
+      colors,      
+      tags,        
+      image,
+      description,
     });
 
-    await newProduct.save();
-    res.status(201).json({ message: 'Product added successfully!' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error while adding product' });
+    await product.save();
+    res.status(201).json({ message: "Product added successfully", product });
+  } catch (error) {
+    console.error("Error creating product:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

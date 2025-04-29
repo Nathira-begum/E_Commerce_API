@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
+const multer = require('multer');
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -14,7 +15,8 @@ const authRoutes = require("./routes/auth");
 require("./passport-setup");
 const vendorRoutes = require('./routes/vendorRoutes');
 const productRoutes = require('./routes/productRoutes');
-
+const path = require('path');
+const fs = require("fs");
 const app = express();
 
 // ------------------ 🔗 Connect to MongoDB ------------------
@@ -23,6 +25,8 @@ connectDB();
 // ------------------ 🔧 Middleware Setup ------------------
 app.use(cookieParser());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: "http://localhost:5173",
@@ -192,6 +196,9 @@ app.post("/api/auth/theme", async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to update theme" });
   }
 });
+
+
+
 
 // ------------------ 🌐 Root Health Check ------------------
 app.get("/", (req, res) => {
