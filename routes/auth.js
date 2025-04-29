@@ -63,17 +63,13 @@ router.post("/login", async (req, res) => {
 router.post(
   "/signup",
   [
-    body("firstName").notEmpty().withMessage("First name is required"),
-    body("lastName").notEmpty().withMessage("Last name is required"),
+    body("name").trim().notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Invalid email format"),
     body("phone")
-      .notEmpty()
-      .withMessage("Phone number is required")
-      .isMobilePhone()
-      .withMessage("Invalid phone number"),
+      .notEmpty().withMessage("Phone number is required")
+      .isMobilePhone().withMessage("Invalid phone number"),
     body("password")
-      .isLength({ min: 6 })
-      .withMessage("Password must be at least 6 characters"),
+      .isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
     body("confirmPassword").custom((value, { req }) => {
       if (value !== req.body.password) {
         throw new Error("Passwords do not match");
@@ -82,6 +78,8 @@ router.post(
     }),
   ],
   async (req, res) => {
+    console.log("Signup request body:", req.body); // 🐞 DEBUG
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res
@@ -89,19 +87,23 @@ router.post(
         .json({ success: false, message: errors.array()[0].msg });
     }
 
-    const { firstName, lastName, email, phone, password, dob, gender } =
-      req.body;
+    const { name, email, phone, password, dob, gender } = req.body;
+
+    // ✂️ Split name into first and last name (best-effort)
+    const nameParts = name.trim().split(" ");
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(" ") || "";
 
     try {
-      if (await User.findOne({ email }))
-        return res
-          .status(400)
-          .json({ success: false, message: "Email already exists" });
+      const existingEmail = await User.findOne({ email });
+      if (existingEmail) {
+        return res.status(400).json({ success: false, message: "Email already exists" });
+      }
 
-      if (await User.findOne({ phone }))
-        return res
-          .status(400)
-          .json({ success: false, message: "Phone number already exists" });
+      const existingPhone = await User.findOne({ phone });
+      if (existingPhone) {
+        return res.status(400).json({ success: false, message: "Phone number already exists" });
+      }
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -110,8 +112,8 @@ router.post(
         lastName,
         email,
         phone,
-        dob,
-        gender,
+        dob: dob || null,
+        gender: gender || "",
         password: hashedPassword,
         emailVerified: false,
       });
@@ -142,7 +144,6 @@ router.post(
     }
   }
 );
-
 // ✅ Verify Email
 router.get("/verify-email/:token", async (req, res) => {
   const { token } = req.params;

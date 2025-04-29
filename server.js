@@ -1,4 +1,3 @@
-// server.js
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -7,39 +6,43 @@ const session = require("express-session");
 const cors = require("cors");
 const app = express();
 
-// Passport setup (Important!)
+// Passport setup
 require("./passport-setup");
 
+// 👇 Add your user auth routes
+const userRoutes = require("./routes/auth"); // make sure this path is correct
+
+// Environment Variables
 const { SERVER_URL, CLIENT_URL, MONGO_URI } = process.env;
 
 // Connect MongoDB
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.log(err));
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Middlewares
-app.use(cors({
-  origin: CLIENT_URL,
-  credentials: true,
-}));
+app.use(cors({ origin: CLIENT_URL || "http://localhost:5173", credentials: true }));
 app.use(express.json());
+
+// Sessions for passport
 app.use(session({
   secret: 'your_secret',
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // true if using HTTPS
+    sameSite: 'lax'
+  }
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
-// 🔥 Google Authentication Routes
-
-// Start Google Auth
-// 1️⃣ Start Google Authentication
+// 🔐 Auth Routes (Google + Facebook)
 app.get('/api/auth/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-// 2️⃣ Handle Google Callback (AFTER user signs in at Google)
 app.get('/api/auth/google/callback', 
   passport.authenticate('google', { 
     successRedirect: '/api/auth/google/success', 
@@ -47,23 +50,17 @@ app.get('/api/auth/google/callback',
   })
 );
 
-// 3️⃣ After successful login, send user data to frontend
 app.get('/api/auth/google/success', (req, res) => {
   if (req.user) {
-    const frontendUrl = "http://localhost:5173";
+    const frontendUrl = CLIENT_URL || "http://localhost:5173";
     res.redirect(`${frontendUrl}?user=${encodeURIComponent(JSON.stringify(req.user))}`);
   } else {
     res.redirect("/login/failed");
   }
 });
 
-
-// 🔥 Facebook Authentication Routes
-
-// Start Facebook Auth
 app.get('/api/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }));
 
-// Facebook Callback
 app.get('/api/auth/facebook/callback',
   passport.authenticate('facebook', { failureRedirect: '/login' }),
   (req, res) => {
@@ -72,8 +69,11 @@ app.get('/api/auth/facebook/callback',
   }
 );
 
+// ✅ Your REST API Routes (signup, login, profile, etc.)
+app.use("/api", userRoutes);
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on ${SERVER_URL}`);
+  console.log(`🚀 Server running at ${SERVER_URL || `http://localhost:${PORT}`}`);
 });
