@@ -83,7 +83,7 @@ async (accessToken, refreshToken, profile, done) => {
         email: profile.emails?.[0]?.value || `noemail@facebook.com`,
         firstName: profile.name?.givenName || "Facebook",
         lastName: profile.name?.familyName || "User",
-        phone: "0000000000",
+        phone: null,
         password: await bcrypt.hash(Math.random().toString(36).slice(-8), 10),
       });
     }

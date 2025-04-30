@@ -5,8 +5,12 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, trim: true},  
   lastName:  { type: String, trim: true },   
   password: { type: String, required: true },
-  phone: { type: String, required: true, unique: true },
-  gender: { type: String },
+  phone: {
+    type: String,
+    unique: true,
+    sparse: true,    // only enforce uniqueness on docs where phone != null
+    default: null    // default to null instead of requiring a value
+  },  gender: { type: String },
   dob: { type: String },
   googleId: { type: String },
   facebookId: { type: String },
