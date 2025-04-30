@@ -10,6 +10,9 @@ const productSchema = new mongoose.Schema({
   tags: [{ type: String }],
   image: { type: String },
   description: { type: String },
+  vendorEmail: { type: String, required: true },
+  approved: { type: Boolean, default: false },
+
 });
 
 module.exports = mongoose.model("Product", productSchema);
