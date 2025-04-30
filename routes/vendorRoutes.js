@@ -1,47 +1,58 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const Vendor = require('../models/Vendor');
+const express = require("express");
 const router = express.Router();
+const Vendor = require("../models/vendor");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
-router.get('/:id', async (req, res) => {
-    try {
-      const vendor = await Vendor.findById(req.params.id);
-      res.json(vendor);
-    } catch (err) {
-      res.status(500).json({ message: 'Error fetching vendor' });
-    }
-  });
-  
 // Vendor Signup
-router.post('/vendorSignup', async (req, res) => {
-  const { username, email, password } = req.body;
+router.post("/signup", async (req, res) => {
   try {
-    const existingVendor = await Vendor.findOne({ email });
-    if (existingVendor) return res.status(400).json({ message: 'Vendor already exists' });
+    const { name, email, phone, password, shopName, address, status } = req.body;
+
+    if (!name || !email || !phone || !password || !shopName || !address) {
+      return res.status(400).json({ msg: "Please fill all required fields" });
+    }
+
+    const exists = await Vendor.findOne({ email });
+    if (exists) return res.status(400).json({ msg: "Vendor already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newVendor = new Vendor({ username, email, password: hashedPassword });
-    await newVendor.save();
-    res.status(201).json({ message: 'Vendor registered successfully' });
+
+    const vendor = new Vendor({
+      name,
+      email,
+      phone,
+      password: hashedPassword,
+      shopName,
+      address,
+      status: status || "pending"
+    });
+
+    await vendor.save();
+    res.status(201).json({ msg: "Vendor created successfully" });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error("Signup error:", err);
+    res.status(500).json({ msg: "Server error", error: err.message });
   }
 });
 
-// Vendor Login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+// Vendor Login (if needed)
+router.post("/login", async (req, res) => {
   try {
+    const { email, password } = req.body;
     const vendor = await Vendor.findOne({ email });
-    if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+    if (!vendor) return res.status(400).json({ msg: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, vendor.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
 
-    res.status(200).json({ message: 'Login successful', vendor: { username: vendor.username, email: vendor.email } });
+    const token = jwt.sign({ id: vendor._id }, JWT_SECRET, { expiresIn: "2d" });
+
+    res.json({ token, vendor: { id: vendor._id, name: vendor.name, email: vendor.email } });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ msg: "Server error", error: err.message });
   }
 });
 

@@ -47,6 +47,7 @@ app.use('/api/products', productRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", require("./routes/admin"));
 
+
 // ------------------ 🔐 Google OAuth ------------------
 app.get("/api/auth/google", (req, res, next) => {
   passport.authenticate("google", {
@@ -63,7 +64,10 @@ app.get("/api/auth/google/callback",
 );
 
 // ------------------ 🔐 Facebook OAuth ------------------
+
 app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+app.get("/api/auth/facebook", passport.authenticate("facebook"));
+
 
 app.get("/api/auth/facebook/callback",
   passport.authenticate("facebook", {
