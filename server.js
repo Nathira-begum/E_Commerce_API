@@ -56,25 +56,29 @@ app.get("/api/auth/google", (req, res, next) => {
   })(req, res, next);
 });
 
-app.get("/api/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: "http://localhost:5173/login",
-    successRedirect: "http://localhost:5173/myaccount",
-  })
-);
+// routes/auth.js or server.js
+app.get('/api/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/signup' }),
+  (req, res) => {
+    const { firstName, lastName, email } = req.user;
+    const redirectUrl = `http://localhost:5173?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&email=${encodeURIComponent(email)}`;
+    res.redirect(redirectUrl);
+});
+
 
 // ------------------ 🔐 Facebook OAuth ------------------
 
-app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+// app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
 app.get("/api/auth/facebook", passport.authenticate("facebook"));
 
 
 app.get("/api/auth/facebook/callback",
-  passport.authenticate("facebook", {
-    failureRedirect: "http://localhost:5173/login",
-    successRedirect: "http://localhost:5173/myaccount",
-  })
-);
+  passport.authenticate('facebook', { failureRedirect: '/signup' }),
+  (req, res) => {
+    const { firstName, lastName, email } = req.user;
+    const redirectUrl = `http://localhost:5173?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&email=${encodeURIComponent(email)}`;
+    res.redirect(redirectUrl);
+});
 
 // ------------------ 🔑 Forgot Password ------------------
 
