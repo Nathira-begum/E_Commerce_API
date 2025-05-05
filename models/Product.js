@@ -11,7 +11,7 @@ const productSchema = new mongoose.Schema({
   image: { type: String },
   description: { type: String },
   vendorEmail: { type: String, required: true },
-  approved: { type: Boolean, default: false },
+  // approved: { type: Boolean, default: false },
 
 });
 
