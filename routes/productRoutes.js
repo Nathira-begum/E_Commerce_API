@@ -45,6 +45,7 @@ router.get('/', async (req, res) => {
   router.post("/add-product", async (req, res) => {
     try {
       const {
+        category,
         name,
         price,
         discount,
@@ -57,11 +58,17 @@ router.get('/', async (req, res) => {
         vendorEmail,
       } = req.body;
   
+      // Handle discount properly: default to 0 if null, undefined, or empty string
+      const discountValue = (discount === null || discount === undefined || discount === '') 
+      ? 0 
+      : Number(discount);
+
       // Create new product with proper array handling
       const product = new Product({
+        category,
         name,
         price,
-        discount,
+        discount: discountValue,
         stock,
         sizes,       
         colors,      
