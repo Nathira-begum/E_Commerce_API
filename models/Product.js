@@ -12,11 +12,10 @@ const productSchema = new mongoose.Schema({
   image: { type: String },
   description: { type: String },
   vendorEmail: { type: String, required: true },
-<<<<<<< HEAD
+
   
-=======
+
   // approved: { type: Boolean, default: false },
->>>>>>> 97595aa657683373d23ca6b270004a655740b418
 
 });
 

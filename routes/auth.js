@@ -266,48 +266,29 @@ router.get("/api/get-user/:id", async (req, res) => {
 // ✅ Update Profile
 router.post("/update-profile", async (req, res) => {
   const { userId, firstName, lastName, email, phone, gender, dob } = req.body;
-
-  if (!userId) {
-    return res
-      .status(400)
-      .json({ success: false, message: "User ID is required" });
-  }
-
   try {
     const user = await User.findById(userId);
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
-
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    
     const updatedFields = {
-      firstName: firstName?.trim() || user.firstName,
-      lastName: lastName?.trim() || user.lastName,
-      email: email?.trim() || user.email,
-      phone: phone?.trim() || user.phone,
-      gender: gender || user.gender,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      gender: gender,
       dob: dob ? new Date(dob) : user.dob,
     };
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, {
-      new: true,
-    });
-
+    
+    const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, { new: true });
+    
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      user: {
-        id: updatedUser._id,
-        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
-        email: updatedUser.email,
-        phone: updatedUser.phone,
-        gender: updatedUser.gender,
-        dob: updatedUser.dob,
-      },
+      user: updatedUser
     });
   } catch (error) {
-    console.error("Update profile error:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("Error updating user:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
